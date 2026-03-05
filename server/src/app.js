@@ -2,15 +2,14 @@ const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 
+const apiRoutes = require("./routes");
+const { notFound, errorHandler } = require("./middleware/errorHandler");
+
 const app = express();
 
-// 1) Middleware that lets server read JSON bodies
 app.use(express.json());
-
-// 2) Middleware that lets server read cookies
 app.use(cookieParser());
 
-// 3) CORS allows React frontend to talk to this backend
 app.use(
   cors({
     origin: "http://localhost:5173",
@@ -18,9 +17,11 @@ app.use(
   })
 );
 
-// Health check route (quick test)
-app.get("/api/health", (req, res) => {
-  res.json({ ok: true, message: "OfficeOps Hub API is running" });
-});
+// All API routes live under /api
+app.use("/api", apiRoutes);
+
+// Error handling (keep at the bottom)
+app.use(notFound);
+app.use(errorHandler);
 
 module.exports = app;
