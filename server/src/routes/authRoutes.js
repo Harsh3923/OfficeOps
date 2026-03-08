@@ -13,7 +13,7 @@ const {
   getMe,
 } = require("../controllers/authController");
 
-const { protect } = require("../middleware/authMiddleware");
+const { protect, authorize } = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
@@ -64,4 +64,11 @@ Confirms reset and saves new password
 */
 router.post("/password-reset/confirm", confirmPasswordReset);
 
+router.get("/HR-only", protect, authorize("HR"), (req, res) => {
+  res.json({ message: "Welcome HR" });
+});
+router.get("/it-tools", protect, authorize("HR", "IT"), (req, res) => {
+  res.json({ message: "IT dashboard" });
+});
+router.get("/me", protect, getMe);
 module.exports = router;
