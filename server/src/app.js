@@ -1,19 +1,23 @@
 const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
+const path = require("path");
 
 const apiRoutes = require("./routes");
 const { notFound, errorHandler } = require("./middleware/errorHandler");
 
 const app = express();
 
-// 1) Middleware that lets your server read JSON bodies
+// Parse JSON request bodies
 app.use(express.json());
 
-// 2) Middleware that lets your server read cookies
+// Parse cookies
 app.use(cookieParser());
 
-// 3) CORS allows your React frontend to talk to this backend
+// Serve uploaded files
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
+// CORS for frontend
 app.use(
   cors({
     origin: "http://localhost:5173",
@@ -21,10 +25,10 @@ app.use(
   })
 );
 
-// Health check route (quick test)
+// API routes
 app.use("/api", apiRoutes);
 
-
+// Error handlers
 app.use(notFound);
 app.use(errorHandler);
 
