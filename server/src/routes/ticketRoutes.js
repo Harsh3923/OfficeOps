@@ -1,4 +1,5 @@
 const express = require("express");
+const { uploadTicketAttachment } = require("../middleware/uploadMiddleware");
 const {
   createTicket,
   getTickets,
@@ -14,6 +15,10 @@ const {
   getHRQueue,
   getITQueue,
   getMyOpenTickets,
+  addTicketComment,
+  getTicketComments,
+  addTicketAttachment,
+  getTicketAttachments,
 } = require("../controllers/ticketController");
 
 const { protect, authorize } = require("../middleware/authMiddleware");
@@ -34,6 +39,15 @@ General ticket routes
 */
 router.get("/", protect, getTickets);
 router.get("/:id/history", protect, getTicketHistory);
+router.get("/:id/comments", protect, getTicketComments);
+router.post("/:id/comment", protect, addTicketComment);
+router.get("/:id/attachments", protect, getTicketAttachments);
+router.post(
+  "/:id/attachments",
+  protect,
+  uploadTicketAttachment.single("attachment"),
+  addTicketAttachment
+);
 router.get("/:id", protect, getTicketById);
 
 /*
