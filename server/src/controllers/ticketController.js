@@ -56,9 +56,227 @@ async function createTicket(req, res, next) {
 }
 
 /*
+All roles
+Get tickets with filtering, search, pagination, and sorting
+EMPLOYEE only sees own tickets
+HR / IT can see all tickets
+*/
+async function getTickets(req, res, next) {
+  try {
+    const {
+      status,
+      requestType,
+      priority,
+      search,
+      page = 1,
+      limit = 10,
+      sortBy = "createdAt",
+      order = "desc",
+    } = req.query;
+
+    const filter = {};
+
+    if (req.user.role === "EMPLOYEE") {
+      filter.createdBy = req.user._id;
+    }
+
+    if (status) {
+      filter.status = status;
+    }
+
+    if (requestType) {
+      filter.requestType = requestType;
+    }
+
+    if (priority) {
+      filter.priority = priority;
+    }
+
+    if (search && search.trim()) {
+      filter.$or = [
+        { title: { $regex: search.trim(), $options: "i" } },
+        { description: { $regex: search.trim(), $options: "i" } },
+      ];
+    }
+
+    const allowedSortFields = [
+      "createdAt",
+      "updatedAt",
+      "priority",
+      "status",
+      "requestType",
+    ];
+    const finalSortBy = allowedSortFields.includes(sortBy)
+      ? sortBy
+      : "createdAt";
+    const finalOrder = order === "asc" ? 1 : -1;
+
+    const pageNumber = Math.max(parseInt(page, 10) || 1, 1);
+    const limitNumber = Math.max(parseInt(limit, 10) || 10, 1);
+    const skip = (pageNumber - 1) * limitNumber;
+
+    const total = await Ticket.countDocuments(filter);
+
+    const tickets = await Ticket.find(filter)
+      .populate("createdBy", "name email role")
+      .populate("hrReviewedBy", "name email role")
+      .populate("itHandledBy", "name email role")
+      .populate("activityLog.performedBy", "name email role")
+      .sort({ [finalSortBy]: finalOrder })
+      .skip(skip)
+      .limit(limitNumber);
+
+    res.status(200).json({
+      ok: true,
+      count: tickets.length,
+      total,
+      page: pageNumber,
+      totalPages: Math.ceil(total / limitNumber),
+      hasNextPage: pageNumber < Math.ceil(total / limitNumber),
+      hasPrevPage: pageNumber > 1,
+      tickets,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/*
+Get single ticket details
+EMPLOYEE can only view own tickets
+HR / IT can view all tickets
+*/
+async function getTicketById(req, res, next) {
+  try {
+    const ticket = await Ticket.findById(req.params.id)
+      .populate("createdBy", "name email role department jobTitle location")
+      .populate("hrReviewedBy", "name email role")
+      .populate("itHandledBy", "name email role")
+      .populate("activityLog.performedBy", "name email role")
+      .populate("comments.createdBy", "name email role")
+      .populate("attachments.uploadedBy", "name email role");
+
+    if (!ticket) {
+      res.status(404);
+      throw new Error("Ticket not found");
+    }
+
+    if (
+      req.user.role === "EMPLOYEE" &&
+      ticket.createdBy._id.toString() !== req.user._id.toString()
+    ) {
+      res.status(403);
+      throw new Error("Access denied");
+    }
+
+    res.status(200).json({
+      ok: true,
+      ticket,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/*
+Get ticket history
+EMPLOYEE can only view own ticket history
+HR / IT can view all ticket history
+*/
+async function getTicketHistory(req, res, next) {
+  try {
+    const ticket = await Ticket.findById(req.params.id)
+      .select("title status createdBy activityLog createdAt updatedAt")
+      .populate("createdBy", "name email role")
+      .populate("activityLog.performedBy", "name email role");
+
+    if (!ticket) {
+      res.status(404);
+      throw new Error("Ticket not found");
+    }
+
+    if (
+      req.user.role === "EMPLOYEE" &&
+      ticket.createdBy._id.toString() !== req.user._id.toString()
+    ) {
+      res.status(403);
+      throw new Error("Access denied");
+    }
+
+    const history = [...(ticket.activityLog || [])].sort(
+      (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
+    );
+
+    res.status(200).json({
+      ok: true,
+      ticketId: ticket._id,
+      title: ticket.title,
+      status: ticket.status,
+      createdBy: ticket.createdBy,
+      historyCount: history.length,
+      history,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/*
 EMPLOYEE
-View own tickets
-HR / IT
+Resubmit rejected ticket
+*/
+async function resubmitRejectedTicket(req, res, next) {
+  try {
+    const { title, description, requestType, priority, requestedChanges } =
+      req.body || {};
+
+    const ticket = await Ticket.findById(req.params.id);
+
+    if (!ticket) {
+      res.status(404);
+      throw new Error("Ticket not found");
+    }
+
+    if (ticket.createdBy.toString() !== req.user._id.toString()) {
+      res.status(403);
+      throw new Error("You can only update your own tickets");
+    }
+
+    if (ticket.status !== "REJECTED_BY_HR") {
+      res.status(400);
+      throw new Error("Only HR-rejected tickets can be resubmitted");
+    }
+
+    if (!title || !description || !requestType) {
+      res.status(400);
+      throw new Error("Title, description, and request type are required");
+    }
+
+    ticket.title = title.trim();
+    ticket.description = description.trim();
+    ticket.requestType = requestType;
+    ticket.requestedChanges = requestedChanges || {};
+    ticket.priority = priority || "MEDIUM";
+    ticket.status = "PENDING_HR";
+    ticket.hrReviewedBy = null;
+    ticket.itHandledBy = null;
+    ticket.hrComment = "";
+    ticket.resolutionNote = "";
+
+    pushActivity(ticket, req.user, "RESUBMITTED", "Ticket resubmitted by employee");
+
+    await ticket.save();
+
+    res.status(200).json({
+      ok: true,
+      message: "Ticket resubmitted successfully",
+      ticket,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 /*
 HR
 Approve ticket
@@ -380,102 +598,11 @@ async function executeTicketByIT(req, res, next) {
   }
 }
 
-async function getTicketById(req, res, next) {
-  try {
-    const ticket = await Ticket.findById(req.params.id)
-      .populate("createdBy", "name email role department jobTitle location")
-      .populate("hrReviewedBy", "name email role")
-      .populate("itHandledBy", "name email role")
-      .populate("activityLog.performedBy", "name email role");
-
-    if (!ticket) {
-      res.status(404);
-      throw new Error("Ticket not found");
-    }
-
-    if (
-      req.user.role === "EMPLOYEE" &&
-      ticket.createdBy._id.toString() !== req.user._id.toString()
-    ) {
-      res.status(403);
-      throw new Error("Access denied");
-    }
-
-    res.status(200).json({
-      ok: true,
-      ticket,
-    });
-  } catch (err) {
-    next(err);
-  }
-}
-
-async function resubmitRejectedTicket(req, res, next) {
-  try {
-    const {
-      title,
-      description,
-      requestType,
-      priority,
-      requestedChanges,
-    } = req.body || {};
-
-    const ticket = await Ticket.findById(req.params.id);
-
-    if (!ticket) {
-      res.status(404);
-      throw new Error("Ticket not found");
-    }
-
-    if (ticket.createdBy.toString() !== req.user._id.toString()) {
-      res.status(403);
-      throw new Error("You can only update your own tickets");
-    }
-
-    if (ticket.status !== "REJECTED_BY_HR") {
-      res.status(400);
-      throw new Error("Only HR-rejected tickets can be resubmitted");
-    }
-
-    if (!title || !description || !requestType) {
-      res.status(400);
-      throw new Error("Title, description, and request type are required");
-    }
-
-    ticket.title = title.trim();
-    ticket.description = description.trim();
-    ticket.requestType = requestType;
-    ticket.requestedChanges = requestedChanges || {};
-    ticket.priority = priority || "MEDIUM";
-    ticket.status = "PENDING_HR";
-    ticket.hrReviewedBy = null;
-    ticket.itHandledBy = null;
-    ticket.hrComment = "";
-    ticket.resolutionNote = "";
-
-    pushActivity(ticket, req.user, "RESUBMITTED", "Ticket resubmitted by employee");
-
-    await ticket.save();
-
-    res.status(200).json({
-      ok: true,
-      message: "Ticket resubmitted successfully",
-      ticket,
-    });
-  } catch (err) {
-    next(err);
-  }
-}
-
-/*
-Dashboard summary counts
-*/
 /*
 Dashboard summary counts
 */
 async function getTicketDashboardSummary(req, res, next) {
   try {
-
     const filter = {};
 
     if (req.user.role === "EMPLOYEE") {
@@ -487,7 +614,7 @@ async function getTicketDashboardSummary(req, res, next) {
       approvedByHr,
       inProgressByIt,
       resolved,
-      rejectedByHr
+      rejectedByHr,
     ] = await Promise.all([
       Ticket.countDocuments({ ...filter, status: "PENDING_HR" }),
       Ticket.countDocuments({ ...filter, status: "APPROVED_BY_HR" }),
@@ -506,121 +633,14 @@ async function getTicketDashboardSummary(req, res, next) {
         rejectedByHr,
       },
     });
-
-  } catch (err) {
-    next(err);
-  }
-}
-async function getTickets(req, res, next) {
-  try {
-    const {
-      status,
-      requestType,
-      priority,
-      search,
-      page = 1,
-      limit = 10,
-      sortBy = "createdAt",
-      order = "desc",
-    } = req.query;
-
-    const filter = {};
-
-    if (req.user.role === "EMPLOYEE") {
-      filter.createdBy = req.user._id;
-    }
-
-    if (status) {
-      filter.status = status;
-    }
-
-    if (requestType) {
-      filter.requestType = requestType;
-    }
-
-    if (priority) {
-      filter.priority = priority;
-    }
-
-    if (search && search.trim()) {
-      filter.$or = [
-        { title: { $regex: search.trim(), $options: "i" } },
-        { description: { $regex: search.trim(), $options: "i" } },
-      ];
-    }
-
-    const allowedSortFields = ["createdAt", "updatedAt", "priority", "status", "requestType"];
-    const finalSortBy = allowedSortFields.includes(sortBy) ? sortBy : "createdAt";
-    const finalOrder = order === "asc" ? 1 : -1;
-
-    const pageNumber = Math.max(parseInt(page, 10) || 1, 1);
-    const limitNumber = Math.max(parseInt(limit, 10) || 10, 1);
-    const skip = (pageNumber - 1) * limitNumber;
-
-    const total = await Ticket.countDocuments(filter);
-
-    const tickets = await Ticket.find(filter)
-      .populate("createdBy", "name email role")
-      .populate("hrReviewedBy", "name email role")
-      .populate("itHandledBy", "name email role")
-      .populate("activityLog.performedBy", "name email role")
-      .sort({ [finalSortBy]: finalOrder })
-      .skip(skip)
-      .limit(limitNumber);
-
-    res.status(200).json({
-      ok: true,
-      count: tickets.length,
-      total,
-      page: pageNumber,
-      totalPages: Math.ceil(total / limitNumber),
-      hasNextPage: pageNumber < Math.ceil(total / limitNumber),
-      hasPrevPage: pageNumber > 1,
-      tickets,
-    });
   } catch (err) {
     next(err);
   }
 }
 
-async function getTicketHistory(req, res, next) {
-  try {
-    const ticket = await Ticket.findById(req.params.id)
-      .select("title status createdBy activityLog createdAt updatedAt")
-      .populate("createdBy", "name email role")
-      .populate("activityLog.performedBy", "name email role");
-
-    if (!ticket) {
-      res.status(404);
-      throw new Error("Ticket not found");
-    }
-
-    if (
-      req.user.role === "EMPLOYEE" &&
-      ticket.createdBy._id.toString() !== req.user._id.toString()
-    ) {
-      res.status(403);
-      throw new Error("Access denied");
-    }
-
-    const history = [...(ticket.activityLog || [])].sort(
-      (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
-    );
-
-    res.status(200).json({
-      ok: true,
-      ticketId: ticket._id,
-      title: ticket.title,
-      status: ticket.status,
-      createdBy: ticket.createdBy,
-      historyCount: history.length,
-      history,
-    });
-  } catch (err) {
-    next(err);
-  }
-}
-
+/*
+HR queue
+*/
 async function getHRQueue(req, res, next) {
   try {
     const pending = await Ticket.find({ status: "PENDING_HR" })
@@ -661,6 +681,9 @@ async function getHRQueue(req, res, next) {
   }
 }
 
+/*
+IT queue
+*/
 async function getITQueue(req, res, next) {
   try {
     const approved = await Ticket.find({
@@ -704,6 +727,9 @@ async function getITQueue(req, res, next) {
   }
 }
 
+/*
+EMPLOYEE open and closed tickets
+*/
 async function getMyOpenTickets(req, res, next) {
   try {
     const openTickets = await Ticket.find({
@@ -736,6 +762,191 @@ async function getMyOpenTickets(req, res, next) {
   }
 }
 
+/*
+Add ticket comment
+*/
+async function addTicketComment(req, res, next) {
+  try {
+    const { message } = req.body || {};
+
+    if (!message || !message.trim()) {
+      res.status(400);
+      throw new Error("Comment message is required");
+    }
+
+    const ticket = await Ticket.findById(req.params.id);
+
+    if (!ticket) {
+      res.status(404);
+      throw new Error("Ticket not found");
+    }
+
+    if (
+      req.user.role === "EMPLOYEE" &&
+      ticket.createdBy.toString() !== req.user._id.toString()
+    ) {
+      res.status(403);
+      throw new Error("You can only comment on your own tickets");
+    }
+
+    ticket.comments.push({
+      message: message.trim(),
+      createdBy: req.user._id,
+      role: req.user.role,
+      createdAt: new Date(),
+    });
+
+    pushActivity(ticket, req.user, "COMMENT_ADDED", message.trim());
+
+    await ticket.save();
+
+    const updatedTicket = await Ticket.findById(ticket._id)
+      .populate("comments.createdBy", "name email role")
+      .populate("activityLog.performedBy", "name email role");
+
+    res.status(200).json({
+      ok: true,
+      message: "Comment added successfully",
+      comments: updatedTicket.comments,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/*
+Get ticket comments
+*/
+async function getTicketComments(req, res, next) {
+  try {
+    const ticket = await Ticket.findById(req.params.id)
+      .select("createdBy comments")
+      .populate("createdBy", "name email role")
+      .populate("comments.createdBy", "name email role");
+
+    if (!ticket) {
+      res.status(404);
+      throw new Error("Ticket not found");
+    }
+
+    if (
+      req.user.role === "EMPLOYEE" &&
+      ticket.createdBy._id.toString() !== req.user._id.toString()
+    ) {
+      res.status(403);
+      throw new Error("Access denied");
+    }
+
+    const comments = [...(ticket.comments || [])].sort(
+      (a, b) => new Date(a.createdAt) - new Date(b.createdAt)
+    );
+
+    res.status(200).json({
+      ok: true,
+      count: comments.length,
+      comments,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/*
+Add ticket attachment
+*/
+async function addTicketAttachment(req, res, next) {
+  try {
+    const ticket = await Ticket.findById(req.params.id);
+
+    if (!ticket) {
+      res.status(404);
+      throw new Error("Ticket not found");
+    }
+
+    if (
+      req.user.role === "EMPLOYEE" &&
+      ticket.createdBy.toString() !== req.user._id.toString()
+    ) {
+      res.status(403);
+      throw new Error("You can only upload attachments to your own tickets");
+    }
+
+    if (!req.file) {
+      res.status(400);
+      throw new Error("Attachment file is required");
+    }
+
+    ticket.attachments.push({
+      originalName: req.file.originalname,
+      fileName: req.file.filename,
+      filePath: `/uploads/tickets/${req.file.filename}`,
+      mimeType: req.file.mimetype,
+      size: req.file.size,
+      uploadedBy: req.user._id,
+      role: req.user.role,
+      uploadedAt: new Date(),
+    });
+
+    pushActivity(
+      ticket,
+      req.user,
+      "ATTACHMENT_ADDED",
+      `Attachment uploaded: ${req.file.originalname}`
+    );
+
+    await ticket.save();
+
+    const updatedTicket = await Ticket.findById(ticket._id)
+      .select("attachments")
+      .populate("attachments.uploadedBy", "name email role");
+
+    res.status(200).json({
+      ok: true,
+      message: "Attachment uploaded successfully",
+      attachments: updatedTicket.attachments,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/*
+Get ticket attachments
+*/
+async function getTicketAttachments(req, res, next) {
+  try {
+    const ticket = await Ticket.findById(req.params.id)
+      .select("createdBy attachments")
+      .populate("createdBy", "name email role")
+      .populate("attachments.uploadedBy", "name email role");
+
+    if (!ticket) {
+      res.status(404);
+      throw new Error("Ticket not found");
+    }
+
+    if (
+      req.user.role === "EMPLOYEE" &&
+      ticket.createdBy._id.toString() !== req.user._id.toString()
+    ) {
+      res.status(403);
+      throw new Error("Access denied");
+    }
+
+    const attachments = [...(ticket.attachments || [])].sort(
+      (a, b) => new Date(a.uploadedAt) - new Date(b.uploadedAt)
+    );
+
+    res.status(200).json({
+      ok: true,
+      count: attachments.length,
+      attachments,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   createTicket,
   getTickets,
@@ -751,4 +962,8 @@ module.exports = {
   getHRQueue,
   getITQueue,
   getMyOpenTickets,
+  addTicketComment,
+  getTicketComments,
+  addTicketAttachment,
+  getTicketAttachments,
 };
