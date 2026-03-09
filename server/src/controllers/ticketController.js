@@ -59,47 +59,6 @@ async function createTicket(req, res, next) {
 EMPLOYEE
 View own tickets
 HR / IT
-View all tickets
-*/
-async function getTickets(req, res, next) {
-  try {
-    const { status, requestType, priority } = req.query;
-
-    const filter = {};
-
-    if (req.user.role === "EMPLOYEE") {
-      filter.createdBy = req.user._id;
-    }
-
-    if (status) {
-      filter.status = status;
-    }
-
-    if (requestType) {
-      filter.requestType = requestType;
-    }
-
-    if (priority) {
-      filter.priority = priority;
-    }
-
-    const tickets = await Ticket.find(filter)
-      .populate("createdBy", "name email role")
-      .populate("hrReviewedBy", "name email role")
-      .populate("itHandledBy", "name email role")
-      .populate("activityLog.performedBy", "name email role")
-      .sort({ createdAt: -1 });
-
-    res.status(200).json({
-      ok: true,
-      count: tickets.length,
-      tickets,
-    });
-  } catch (err) {
-    next(err);
-  }
-}
-
 /*
 HR
 Approve ticket
