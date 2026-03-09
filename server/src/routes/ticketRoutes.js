@@ -20,7 +20,6 @@ const {
   addTicketAttachment,
   getTicketAttachments,
 } = require("../controllers/ticketController");
-
 const { protect, authorize } = require("../middleware/authMiddleware");
 
 const router = express.Router();
