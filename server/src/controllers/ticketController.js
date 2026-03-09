@@ -582,10 +582,50 @@ async function getTickets(req, res, next) {
     next(err);
   }
 }
+
+async function getTicketHistory(req, res, next) {
+  try {
+    const ticket = await Ticket.findById(req.params.id)
+      .select("title status createdBy activityLog createdAt updatedAt")
+      .populate("createdBy", "name email role")
+      .populate("activityLog.performedBy", "name email role");
+
+    if (!ticket) {
+      res.status(404);
+      throw new Error("Ticket not found");
+    }
+
+    if (
+      req.user.role === "EMPLOYEE" &&
+      ticket.createdBy._id.toString() !== req.user._id.toString()
+    ) {
+      res.status(403);
+      throw new Error("Access denied");
+    }
+
+    const history = [...(ticket.activityLog || [])].sort(
+      (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
+    );
+
+    res.status(200).json({
+      ok: true,
+      ticketId: ticket._id,
+      title: ticket.title,
+      status: ticket.status,
+      createdBy: ticket.createdBy,
+      historyCount: history.length,
+      history,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   createTicket,
   getTickets,
   getTicketById,
+  getTicketHistory,
   resubmitRejectedTicket,
   approveTicketByHR,
   rejectTicketByHR,
