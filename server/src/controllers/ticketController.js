@@ -122,6 +122,8 @@ async function getTickets(req, res, next) {
       .populate("hrReviewedBy", "name email role")
       .populate("itHandledBy", "name email role")
       .populate("activityLog.performedBy", "name email role")
+      .populate("comments.createdBy", "name email role")
+      .populate("attachments.uploadedBy", "name email role")
       .sort({ [finalSortBy]: finalOrder })
       .skip(skip)
       .limit(limitNumber);
