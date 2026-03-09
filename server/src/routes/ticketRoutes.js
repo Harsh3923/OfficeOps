@@ -3,6 +3,7 @@ const {
   createTicket,
   getTickets,
   getTicketById,
+  getTicketHistory,
   resubmitRejectedTicket,
   approveTicketByHR,
   rejectTicketByHR,
@@ -44,5 +45,6 @@ router.patch("/:id/execute", protect, authorize("IT"), executeTicketByIT);
 
 router.get("/dashboard/summary", protect, getTicketDashboardSummary);
 router.get("/", protect, getTickets);
+router.get("/:id/history", protect, getTicketHistory);
 router.get("/:id", protect, getTicketById);
 module.exports = router;
