@@ -1,5 +1,74 @@
 const mongoose = require("mongoose");
 
+const ticketCommentSchema = new mongoose.Schema(
+  {
+    message: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    role: {
+      type: String,
+      enum: ["EMPLOYEE", "HR", "IT"],
+      required: true,
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now,
+    },
+  },
+  { _id: false }
+);
+
+const ticketAttachmentSchema = new mongoose.Schema(
+  {
+    originalName: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    fileName: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    filePath: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    mimeType: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    size: {
+      type: Number,
+      required: true,
+    },
+    uploadedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    role: {
+      type: String,
+      enum: ["EMPLOYEE", "HR", "IT"],
+      required: true,
+    },
+    uploadedAt: {
+      type: Date,
+      default: Date.now,
+    },
+  },
+  { _id: false }
+);
+
 const ticketActivitySchema = new mongoose.Schema(
   {
     action: {
@@ -100,6 +169,14 @@ const ticketSchema = new mongoose.Schema(
       type: String,
       trim: true,
       default: "",
+    },
+    comments: {
+      type: [ticketCommentSchema],
+      default: [],
+    },
+    attachments: {
+      type: [ticketAttachmentSchema],
+      default: [],
     },
     activityLog: {
       type: [ticketActivitySchema],
