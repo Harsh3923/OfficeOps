@@ -9,6 +9,7 @@ const {
   startTicketByIT,
   resolveTicketByIT,
   executeTicketByIT,
+  getTicketDashboardSummary
 } = require("../controllers/ticketController");
 
 const { protect, authorize } = require("../middleware/authMiddleware");
@@ -40,4 +41,8 @@ router.patch("/:id/start", protect, authorize("IT"), startTicketByIT);
 router.patch("/:id/resolve", protect, authorize("IT"), resolveTicketByIT);
 router.patch("/:id/execute", protect, authorize("IT"), executeTicketByIT);
 
+
+router.get("/dashboard/summary", protect, getTicketDashboardSummary);
+router.get("/", protect, getTickets);
+router.get("/:id", protect, getTicketById);
 module.exports = router;
