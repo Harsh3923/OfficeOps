@@ -508,6 +508,80 @@ async function resubmitRejectedTicket(req, res, next) {
   }
 }
 
+/*
+Dashboard summary counts
+*/
+async function getTickets(req, res, next) {
+  try {
+    const {
+      status,
+      requestType,
+      priority,
+      search,
+      page = 1,
+      limit = 10,
+      sortBy = "createdAt",
+      order = "desc",
+    } = req.query;
+
+    const filter = {};
+
+    if (req.user.role === "EMPLOYEE") {
+      filter.createdBy = req.user._id;
+    }
+
+    if (status) {
+      filter.status = status;
+    }
+
+    if (requestType) {
+      filter.requestType = requestType;
+    }
+
+    if (priority) {
+      filter.priority = priority;
+    }
+
+    if (search && search.trim()) {
+      filter.$or = [
+        { title: { $regex: search.trim(), $options: "i" } },
+        { description: { $regex: search.trim(), $options: "i" } },
+      ];
+    }
+
+    const allowedSortFields = ["createdAt", "updatedAt", "priority", "status", "requestType"];
+    const finalSortBy = allowedSortFields.includes(sortBy) ? sortBy : "createdAt";
+    const finalOrder = order === "asc" ? 1 : -1;
+
+    const pageNumber = Math.max(parseInt(page, 10) || 1, 1);
+    const limitNumber = Math.max(parseInt(limit, 10) || 10, 1);
+    const skip = (pageNumber - 1) * limitNumber;
+
+    const total = await Ticket.countDocuments(filter);
+
+    const tickets = await Ticket.find(filter)
+      .populate("createdBy", "name email role")
+      .populate("hrReviewedBy", "name email role")
+      .populate("itHandledBy", "name email role")
+      .populate("activityLog.performedBy", "name email role")
+      .sort({ [finalSortBy]: finalOrder })
+      .skip(skip)
+      .limit(limitNumber);
+
+    res.status(200).json({
+      ok: true,
+      count: tickets.length,
+      total,
+      page: pageNumber,
+      totalPages: Math.ceil(total / limitNumber),
+      hasNextPage: pageNumber < Math.ceil(total / limitNumber),
+      hasPrevPage: pageNumber > 1,
+      tickets,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
 module.exports = {
   createTicket,
   getTickets,
@@ -518,4 +592,5 @@ module.exports = {
   startTicketByIT,
   resolveTicketByIT,
   executeTicketByIT,
+  getTicketDashboardSummary,
 };
