@@ -10,7 +10,10 @@ const {
   startTicketByIT,
   resolveTicketByIT,
   executeTicketByIT,
-  getTicketDashboardSummary
+  getTicketDashboardSummary,
+  getHRQueue,
+  getITQueue,
+  getMyOpenTickets,
 } = require("../controllers/ticketController");
 
 const { protect, authorize } = require("../middleware/authMiddleware");
@@ -18,9 +21,19 @@ const { protect, authorize } = require("../middleware/authMiddleware");
 const router = express.Router();
 
 /*
-All logged in users
+Dashboard + queue routes
+These must come before /:id
+*/
+router.get("/dashboard/summary", protect, getTicketDashboardSummary);
+router.get("/hr/queue", protect, authorize("HR"), getHRQueue);
+router.get("/it/queue", protect, authorize("IT"), getITQueue);
+router.get("/my/open", protect, authorize("EMPLOYEE"), getMyOpenTickets);
+
+/*
+General ticket routes
 */
 router.get("/", protect, getTickets);
+router.get("/:id/history", protect, getTicketHistory);
 router.get("/:id", protect, getTicketById);
 
 /*
@@ -42,9 +55,4 @@ router.patch("/:id/start", protect, authorize("IT"), startTicketByIT);
 router.patch("/:id/resolve", protect, authorize("IT"), resolveTicketByIT);
 router.patch("/:id/execute", protect, authorize("IT"), executeTicketByIT);
 
-
-router.get("/dashboard/summary", protect, getTicketDashboardSummary);
-router.get("/", protect, getTickets);
-router.get("/:id/history", protect, getTicketHistory);
-router.get("/:id", protect, getTicketById);
 module.exports = router;
