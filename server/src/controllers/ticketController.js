@@ -511,6 +511,47 @@ async function resubmitRejectedTicket(req, res, next) {
 /*
 Dashboard summary counts
 */
+/*
+Dashboard summary counts
+*/
+async function getTicketDashboardSummary(req, res, next) {
+  try {
+
+    const filter = {};
+
+    if (req.user.role === "EMPLOYEE") {
+      filter.createdBy = req.user._id;
+    }
+
+    const [
+      pendingHr,
+      approvedByHr,
+      inProgressByIt,
+      resolved,
+      rejectedByHr
+    ] = await Promise.all([
+      Ticket.countDocuments({ ...filter, status: "PENDING_HR" }),
+      Ticket.countDocuments({ ...filter, status: "APPROVED_BY_HR" }),
+      Ticket.countDocuments({ ...filter, status: "IN_PROGRESS_BY_IT" }),
+      Ticket.countDocuments({ ...filter, status: "RESOLVED" }),
+      Ticket.countDocuments({ ...filter, status: "REJECTED_BY_HR" }),
+    ]);
+
+    res.status(200).json({
+      ok: true,
+      summary: {
+        pendingHr,
+        approvedByHr,
+        inProgressByIt,
+        resolved,
+        rejectedByHr,
+      },
+    });
+
+  } catch (err) {
+    next(err);
+  }
+}
 async function getTickets(req, res, next) {
   try {
     const {
@@ -621,6 +662,121 @@ async function getTicketHistory(req, res, next) {
   }
 }
 
+async function getHRQueue(req, res, next) {
+  try {
+    const pending = await Ticket.find({ status: "PENDING_HR" })
+      .populate("createdBy", "name email role")
+      .populate("hrReviewedBy", "name email role")
+      .populate("itHandledBy", "name email role")
+      .sort({ createdAt: -1 });
+
+    const approved = await Ticket.find({ status: "APPROVED_BY_HR" })
+      .populate("createdBy", "name email role")
+      .populate("hrReviewedBy", "name email role")
+      .populate("itHandledBy", "name email role")
+      .sort({ createdAt: -1 });
+
+    const rejected = await Ticket.find({ status: "REJECTED_BY_HR" })
+      .populate("createdBy", "name email role")
+      .populate("hrReviewedBy", "name email role")
+      .populate("itHandledBy", "name email role")
+      .sort({ createdAt: -1 });
+
+    const resolved = await Ticket.find({ status: "RESOLVED" })
+      .populate("createdBy", "name email role")
+      .populate("hrReviewedBy", "name email role")
+      .populate("itHandledBy", "name email role")
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      ok: true,
+      queue: {
+        pending,
+        approved,
+        rejected,
+        resolved,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function getITQueue(req, res, next) {
+  try {
+    const approved = await Ticket.find({
+      status: "APPROVED_BY_HR",
+      requestType: {
+        $in: [
+          "ASSET_ASSIGNMENT",
+          "ASSET_UNASSIGNMENT",
+          "ACCOUNT_UPDATE",
+          "ACCOUNT_DELETION",
+        ],
+      },
+    })
+      .populate("createdBy", "name email role")
+      .populate("hrReviewedBy", "name email role")
+      .populate("itHandledBy", "name email role")
+      .sort({ createdAt: -1 });
+
+    const inProgress = await Ticket.find({ status: "IN_PROGRESS_BY_IT" })
+      .populate("createdBy", "name email role")
+      .populate("hrReviewedBy", "name email role")
+      .populate("itHandledBy", "name email role")
+      .sort({ createdAt: -1 });
+
+    const resolved = await Ticket.find({ status: "RESOLVED" })
+      .populate("createdBy", "name email role")
+      .populate("hrReviewedBy", "name email role")
+      .populate("itHandledBy", "name email role")
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      ok: true,
+      queue: {
+        approved,
+        inProgress,
+        resolved,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function getMyOpenTickets(req, res, next) {
+  try {
+    const openTickets = await Ticket.find({
+      createdBy: req.user._id,
+      status: { $in: ["PENDING_HR", "APPROVED_BY_HR", "IN_PROGRESS_BY_IT"] },
+    })
+      .populate("createdBy", "name email role")
+      .populate("hrReviewedBy", "name email role")
+      .populate("itHandledBy", "name email role")
+      .sort({ createdAt: -1 });
+
+    const closedTickets = await Ticket.find({
+      createdBy: req.user._id,
+      status: { $in: ["RESOLVED", "REJECTED_BY_HR"] },
+    })
+      .populate("createdBy", "name email role")
+      .populate("hrReviewedBy", "name email role")
+      .populate("itHandledBy", "name email role")
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      ok: true,
+      tickets: {
+        open: openTickets,
+        closed: closedTickets,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   createTicket,
   getTickets,
@@ -633,4 +789,7 @@ module.exports = {
   resolveTicketByIT,
   executeTicketByIT,
   getTicketDashboardSummary,
+  getHRQueue,
+  getITQueue,
+  getMyOpenTickets,
 };
