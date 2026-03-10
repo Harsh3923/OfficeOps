@@ -1,6 +1,7 @@
 const Ticket = require("../models/Ticket");
 const User = require("../models/User");
 const Asset = require("../models/Asset");
+const createNotification = require("../utils/createNotification");
 
 function pushActivity(ticket, user, action, note = "") {
   ticket.activityLog.push({
@@ -10,6 +11,32 @@ function pushActivity(ticket, user, action, note = "") {
     note,
     timestamp: new Date(),
   });
+}
+
+/* Helper function for notification model */
+async function notifyUsers(recipients = [], payload = {}) {
+  const uniqueRecipients = [
+    ...new Set(
+      recipients
+        .filter(Boolean)
+        .map((id) => id.toString())
+    ),
+  ];
+
+  if (!uniqueRecipients.length) return;
+
+  await Promise.all(
+    uniqueRecipients.map((recipient) =>
+      createNotification({
+        recipient,
+        sender: payload.sender || null,
+        ticket: payload.ticket || null,
+        type: payload.type,
+        title: payload.title,
+        message: payload.message,
+      })
+    )
+  );
 }
 
 /*
@@ -44,6 +71,19 @@ async function createTicket(req, res, next) {
         },
       ],
     });
+
+    const hrUsers = await User.find({ role: "HR" }).select("_id");
+
+    await notifyUsers(
+      hrUsers.map((user) => user._id),
+      {
+        sender: req.user._id,
+        ticket: ticket._id,
+        type: "TICKET_CREATED",
+        title: "New ticket submitted",
+        message: `${req.user.name} submitted a new ticket: ${ticket.title}`,
+      }
+    );
 
     res.status(201).json({
       ok: true,
@@ -269,6 +309,19 @@ async function resubmitRejectedTicket(req, res, next) {
 
     await ticket.save();
 
+    const hrUsers = await User.find({ role: "HR" }).select("_id");
+
+    await notifyUsers(
+      hrUsers.map((user) => user._id),
+      {
+        sender: req.user._id,
+        ticket: ticket._id,
+        type: "TICKET_RESUBMITTED",
+        title: "Ticket resubmitted",
+        message: `${req.user.name} resubmitted ticket: ${ticket.title}`,
+      }
+    );
+
     res.status(200).json({
       ok: true,
       message: "Ticket resubmitted successfully",
@@ -285,7 +338,10 @@ Approve ticket
 */
 async function approveTicketByHR(req, res, next) {
   try {
-    const ticket = await Ticket.findById(req.params.id);
+    const ticket = await Ticket.findById(req.params.id).populate(
+      "createdBy",
+      "name email role"
+    );
 
     if (!ticket) {
       res.status(404);
@@ -310,6 +366,37 @@ async function approveTicketByHR(req, res, next) {
 
     await ticket.save();
 
+    await createNotification({
+      recipient: ticket.createdBy._id,
+      sender: req.user._id,
+      ticket: ticket._id,
+      type: "TICKET_APPROVED",
+      title: "Ticket approved",
+      message: `HR approved your ticket: ${ticket.title}`,
+    });
+
+    const itRelevantTypes = [
+      "ASSET_ASSIGNMENT",
+      "ASSET_UNASSIGNMENT",
+      "ACCOUNT_UPDATE",
+      "ACCOUNT_DELETION",
+    ];
+
+    if (itRelevantTypes.includes(ticket.requestType)) {
+      const itUsers = await User.find({ role: "IT" }).select("_id");
+
+      await notifyUsers(
+        itUsers.map((user) => user._id),
+        {
+          sender: req.user._id,
+          ticket: ticket._id,
+          type: "TICKET_APPROVED",
+          title: "New IT ticket approved",
+          message: `HR approved a ticket for IT action: ${ticket.title}`,
+        }
+      );
+    }
+
     res.status(200).json({
       ok: true,
       message: "Ticket approved by HR",
@@ -333,7 +420,10 @@ async function rejectTicketByHR(req, res, next) {
       throw new Error("HR comment is required when rejecting a ticket");
     }
 
-    const ticket = await Ticket.findById(req.params.id);
+    const ticket = await Ticket.findById(req.params.id).populate(
+      "createdBy",
+      "name email role"
+    );
 
     if (!ticket) {
       res.status(404);
@@ -353,6 +443,15 @@ async function rejectTicketByHR(req, res, next) {
 
     await ticket.save();
 
+    await createNotification({
+      recipient: ticket.createdBy._id,
+      sender: req.user._id,
+      ticket: ticket._id,
+      type: "TICKET_REJECTED",
+      title: "Ticket rejected",
+      message: `HR rejected your ticket: ${ticket.title}`,
+    });
+
     res.status(200).json({
       ok: true,
       message: "Ticket rejected by HR",
@@ -363,13 +462,17 @@ async function rejectTicketByHR(req, res, next) {
   }
 }
 
+
 /*
 IT
 Start working on HR-approved ticket
 */
 async function startTicketByIT(req, res, next) {
   try {
-    const ticket = await Ticket.findById(req.params.id);
+    const ticket = await Ticket.findById(req.params.id).populate(
+      "createdBy",
+      "name email role"
+    );
 
     if (!ticket) {
       res.status(404);
@@ -405,6 +508,15 @@ async function startTicketByIT(req, res, next) {
 
     await ticket.save();
 
+    await createNotification({
+      recipient: ticket.createdBy._id,
+      sender: req.user._id,
+      ticket: ticket._id,
+      type: "TICKET_STARTED",
+      title: "IT started your ticket",
+      message: `IT started working on your ticket: ${ticket.title}`,
+    });
+
     res.status(200).json({
       ok: true,
       message: "Ticket is now in progress by IT",
@@ -429,7 +541,10 @@ async function resolveTicketByIT(req, res, next) {
       throw new Error("Resolution note is required");
     }
 
-    const ticket = await Ticket.findById(req.params.id);
+    const ticket = await Ticket.findById(req.params.id).populate(
+      "createdBy",
+      "name email role"
+    );
 
     if (!ticket) {
       res.status(404);
@@ -449,6 +564,28 @@ async function resolveTicketByIT(req, res, next) {
 
     await ticket.save();
 
+    await createNotification({
+      recipient: ticket.createdBy._id,
+      sender: req.user._id,
+      ticket: ticket._id,
+      type: "TICKET_RESOLVED",
+      title: "Ticket resolved",
+      message: `IT resolved your ticket: ${ticket.title}`,
+    });
+
+    const hrUsers = await User.find({ role: "HR" }).select("_id");
+
+    await notifyUsers(
+      hrUsers.map((user) => user._id),
+      {
+        sender: req.user._id,
+        ticket: ticket._id,
+        type: "TICKET_RESOLVED",
+        title: "Ticket resolved by IT",
+        message: `IT resolved ticket: ${ticket.title}`,
+      }
+    );
+
     res.status(200).json({
       ok: true,
       message: "Ticket resolved successfully",
@@ -458,7 +595,6 @@ async function resolveTicketByIT(req, res, next) {
     next(err);
   }
 }
-
 /*
 IT
 Execute structured HR-approved ticket and resolve it
@@ -530,8 +666,7 @@ async function executeTicketByIT(req, res, next) {
       asset.status = "AVAILABLE";
       await asset.save();
     } else if (ticket.requestType === "ACCOUNT_UPDATE") {
-      const { employeeId, name, email, department, jobTitle, location } =
-        changes;
+      const { employeeId, name, email, department, jobTitle, location } = changes;
 
       if (!employeeId) {
         res.status(400);
@@ -573,7 +708,10 @@ async function executeTicketByIT(req, res, next) {
         throw new Error("Invalid employee");
       }
 
-      await Ticket.deleteMany({ createdBy: employee._id });
+      await Ticket.deleteMany({
+        createdBy: employee._id,
+        _id: { $ne: ticket._id },
+      });
       await User.deleteOne({ _id: employee._id });
     } else {
       res.status(400);
@@ -590,10 +728,37 @@ async function executeTicketByIT(req, res, next) {
 
     await ticket.save();
 
+    const populatedTicket = await Ticket.findById(ticket._id).populate(
+      "createdBy",
+      "name email role"
+    );
+
+    await createNotification({
+      recipient: populatedTicket.createdBy._id,
+      sender: req.user._id,
+      ticket: populatedTicket._id,
+      type: "TICKET_EXECUTED",
+      title: "Ticket executed and resolved",
+      message: `IT executed and resolved your ticket: ${populatedTicket.title}`,
+    });
+
+    const hrUsers = await User.find({ role: "HR" }).select("_id");
+
+    await notifyUsers(
+      hrUsers.map((user) => user._id),
+      {
+        sender: req.user._id,
+        ticket: populatedTicket._id,
+        type: "TICKET_EXECUTED",
+        title: "Ticket executed by IT",
+        message: `IT executed and resolved ticket: ${populatedTicket.title}`,
+      }
+    );
+
     res.status(200).json({
       ok: true,
       message: "Ticket executed and resolved successfully",
-      ticket,
+      ticket: populatedTicket,
     });
   } catch (err) {
     next(err);
@@ -776,7 +941,8 @@ async function addTicketComment(req, res, next) {
       throw new Error("Comment message is required");
     }
 
-    const ticket = await Ticket.findById(req.params.id);
+    const ticket = await Ticket.findById(req.params.id)
+      .populate("createdBy", "name email role");
 
     if (!ticket) {
       res.status(404);
@@ -785,7 +951,7 @@ async function addTicketComment(req, res, next) {
 
     if (
       req.user.role === "EMPLOYEE" &&
-      ticket.createdBy.toString() !== req.user._id.toString()
+      ticket.createdBy._id.toString() !== req.user._id.toString()
     ) {
       res.status(403);
       throw new Error("You can only comment on your own tickets");
@@ -801,6 +967,28 @@ async function addTicketComment(req, res, next) {
     pushActivity(ticket, req.user, "COMMENT_ADDED", message.trim());
 
     await ticket.save();
+
+    const recipients = [];
+
+    if (ticket.createdBy?._id?.toString() !== req.user._id.toString()) {
+      recipients.push(ticket.createdBy._id);
+    }
+
+    if (ticket.hrReviewedBy && ticket.hrReviewedBy.toString() !== req.user._id.toString()) {
+      recipients.push(ticket.hrReviewedBy);
+    }
+
+    if (ticket.itHandledBy && ticket.itHandledBy.toString() !== req.user._id.toString()) {
+      recipients.push(ticket.itHandledBy);
+    }
+
+    await notifyUsers(recipients, {
+      sender: req.user._id,
+      ticket: ticket._id,
+      type: "COMMENT_ADDED",
+      title: "New ticket comment",
+      message: `${req.user.name} commented on ticket: ${ticket.title}`,
+    });
 
     const updatedTicket = await Ticket.findById(ticket._id)
       .populate("comments.createdBy", "name email role")
@@ -858,7 +1046,8 @@ Add ticket attachment
 */
 async function addTicketAttachment(req, res, next) {
   try {
-    const ticket = await Ticket.findById(req.params.id);
+    const ticket = await Ticket.findById(req.params.id)
+      .populate("createdBy", "name email role");
 
     if (!ticket) {
       res.status(404);
@@ -867,7 +1056,7 @@ async function addTicketAttachment(req, res, next) {
 
     if (
       req.user.role === "EMPLOYEE" &&
-      ticket.createdBy.toString() !== req.user._id.toString()
+      ticket.createdBy._id.toString() !== req.user._id.toString()
     ) {
       res.status(403);
       throw new Error("You can only upload attachments to your own tickets");
@@ -897,6 +1086,28 @@ async function addTicketAttachment(req, res, next) {
     );
 
     await ticket.save();
+
+    const recipients = [];
+
+    if (ticket.createdBy?._id?.toString() !== req.user._id.toString()) {
+      recipients.push(ticket.createdBy._id);
+    }
+
+    if (ticket.hrReviewedBy && ticket.hrReviewedBy.toString() !== req.user._id.toString()) {
+      recipients.push(ticket.hrReviewedBy);
+    }
+
+    if (ticket.itHandledBy && ticket.itHandledBy.toString() !== req.user._id.toString()) {
+      recipients.push(ticket.itHandledBy);
+    }
+
+    await notifyUsers(recipients, {
+      sender: req.user._id,
+      ticket: ticket._id,
+      type: "ATTACHMENT_ADDED",
+      title: "New ticket attachment",
+      message: `${req.user.name} added an attachment to ticket: ${ticket.title}`,
+    });
 
     const updatedTicket = await Ticket.findById(ticket._id)
       .select("attachments")
