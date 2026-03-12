@@ -9,6 +9,8 @@ import RoleRoute from "./components/RoleRoute";
 import EmployeeDashboard from "./pages/employee/EmployeeDashboard";
 import HRDashboard from "./pages/hr/HRDashboard";
 import ITDashboard from "./pages/it/ITDashboard";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
 
 export default function App() {
   return (
@@ -17,6 +19,8 @@ export default function App() {
       <Route path="/signup" element={<SignupPage />} />
       <Route path="/verify-otp" element={<VerifyOtpPage />} />
       <Route path="/unauthorized" element={<UnauthorizedPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
 
       <Route element={<ProtectedRoute />}>
         <Route element={<RoleRoute allowedRoles={["EMPLOYEE"]} />}>
