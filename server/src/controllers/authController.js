@@ -180,14 +180,20 @@ async function login(req, res, next) {
 
     const user = await User.findOne({ email: normalizedEmail });
     if (!user) {
-      res.status(401);
-      throw new Error("Invalid email or password");
+      return res.status(401).json({
+        ok: false,
+        code: "INVALID_EMAIL",
+        message: "Invalid email",
+      });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      res.status(401);
-      throw new Error("Invalid email or password");
+      return res.status(401).json({
+        ok: false,
+        code: "INVALID_PASSWORD",
+        message: "Incorrect password",
+      });
     }
 
     const token = generateToken(user._id);
