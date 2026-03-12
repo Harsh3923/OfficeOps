@@ -53,6 +53,25 @@ async function createTicket(req, res, next) {
       throw new Error("Title, description, and request type are required");
     }
 
+    const attachments = [];
+
+    if (req.file) {
+      attachments.push({
+        originalName: req.file.originalname,
+        fileName: req.file.filename,
+        filePath: req.file.path,
+        mimeType: req.file.mimetype,
+        size: req.file.size,
+        uploadedBy: req.user._id,
+        role: req.user.role,
+        uploadedAt: new Date(),
+      });
+    }
+
+    const initialNote = req.file
+      ? `Ticket created with attachment: ${req.file.originalname}`
+      : "Ticket created";
+
     const ticket = await Ticket.create({
       title: title.trim(),
       description: description.trim(),
@@ -61,12 +80,13 @@ async function createTicket(req, res, next) {
       priority: priority || "MEDIUM",
       createdBy: req.user._id,
       status: "PENDING_HR",
+      attachments,
       activityLog: [
         {
           action: "CREATED",
           performedBy: req.user._id,
           role: req.user.role,
-          note: "Ticket created",
+          note: initialNote,
           timestamp: new Date(),
         },
       ],
