@@ -1,0 +1,26 @@
+.hr-page {
+  background-image: url("/src/assets/hr-bg.png");
+  background-size: 700px;
+  background-position: center;
+  background-repeat: repeat;
+  background-color: #f5f7f6;
+}
+
+.employee-page::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  
+  z-index: 0;
+}
+
+@media (max-width: 720px) {
+  .employee-page {
+    background-size: 340px;
+    background-position: center top;
+  }
+
+  .employee-page::before {
+    background: rgba(245, 247, 246, 0.92);
+  }
+}
