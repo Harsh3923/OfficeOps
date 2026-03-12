@@ -2,7 +2,10 @@ import React from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
-export default function Navbar() {
+export default function Navbar({
+  notificationCount = 0,
+  onNotificationClick = () => {},
+}) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -32,7 +35,21 @@ export default function Navbar() {
         </Link>
 
         <div className="topbar-right">
-          {user && (
+          <button
+            className="notification-bell"
+            onClick={onNotificationClick}
+            type="button"
+            aria-label="Notifications"
+          >
+            <span className="bell-icon">🔔</span>
+            {notificationCount > 0 ? (
+              <span className="notification-badge">
+                {notificationCount > 9 ? "9+" : notificationCount}
+              </span>
+            ) : null}
+          </button>
+
+          {user ? (
             <>
               <div className="topbar-user">
                 <span className="topbar-user-name">{user.name}</span>
@@ -45,7 +62,7 @@ export default function Navbar() {
                 Logout
               </button>
             </>
-          )}
+          ) : null}
         </div>
       </div>
     </nav>
