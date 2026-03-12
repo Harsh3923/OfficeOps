@@ -52,7 +52,13 @@ router.get("/:id", protect, getTicketById);
 /*
 Employee actions
 */
-router.post("/", protect, authorize("EMPLOYEE"), createTicket);
+router.post(
+  "/",
+  protect,
+  authorize("EMPLOYEE"),
+  uploadTicketAttachment.single("attachment"),
+  createTicket
+);
 router.patch("/:id/resubmit", protect, authorize("EMPLOYEE"), resubmitRejectedTicket);
 
 /*
