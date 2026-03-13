@@ -395,11 +395,16 @@ async function approveTicketByHR(req, res, next) {
       message: `HR approved your ticket: ${ticket.title}`,
     });
 
+    
     const itRelevantTypes = [
+      "TECH_SUPPORT",
+      "ASSET_REQUEST",
+      "ACCESS_REQUEST",
       "ASSET_ASSIGNMENT",
       "ASSET_UNASSIGNMENT",
       "ACCOUNT_UPDATE",
       "ACCOUNT_DELETION",
+      "OTHER",
     ];
 
     if (itRelevantTypes.includes(ticket.requestType)) {
@@ -510,10 +515,14 @@ async function startTicketByIT(req, res, next) {
     }
 
     const allowedTypes = [
+      "TECH_SUPPORT",
+      "ASSET_REQUEST",
+      "ACCESS_REQUEST",
       "ASSET_ASSIGNMENT",
       "ASSET_UNASSIGNMENT",
       "ACCOUNT_UPDATE",
       "ACCOUNT_DELETION",
+      "OTHER",
     ];
 
     if (!allowedTypes.includes(ticket.requestType)) {
@@ -877,10 +886,14 @@ async function getITQueue(req, res, next) {
       status: "APPROVED_BY_HR",
       requestType: {
         $in: [
+          "TECH_SUPPORT",
+          "ASSET_REQUEST",
+          "ACCESS_REQUEST",
           "ASSET_ASSIGNMENT",
           "ASSET_UNASSIGNMENT",
           "ACCOUNT_UPDATE",
           "ACCOUNT_DELETION",
+          "OTHER",
         ],
       },
     })
