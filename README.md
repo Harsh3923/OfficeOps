@@ -134,13 +134,13 @@ Every step is logged, notified, and visible to all relevant parties — eliminat
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                                                             │
-│  EMPLOYEE ──creates──► TICKET (status: PENDING_HR)         │
+│  EMPLOYEE ──creates──► TICKET (status: PENDING_HR)          │
 │                             │                               │
 │                             ▼                               │
 │              HR reviews ticket                              │
 │                    ├── Rejects ──► status: REJECTED_BY_HR   │
 │                    │                    │                   │
-│                    │              Employee can resubmit      │
+│                    │              Employee can resubmit     │
 │                    │                                        │
 │                    └── Approves ──► status: APPROVED_BY_HR  │
 │                                          │                  │
